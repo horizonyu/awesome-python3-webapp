@@ -1,24 +1,24 @@
 from orm import Model,StringField,IntegerField,BooleanField,FloatField,TextField
 import time,uuid
 
+''' produce a unique id which is used to add a primary key to every single line
+   声成一个基于时间的独一无二的id，作为数据库表中每一行的主键
+   time.time(): 放回当前的时间戳
+   uuid4(): 是一组伪随机数，有一定的重复概率
+   '''
 def next_id():
-    ''' produce a unique id which is used to add a primary key to every single line
-    声成一个基于时间的独一无二的id，作为数据库表中每一行的主键
-    time.time(): 放回当前的时间戳
-    uuid4(): 是一组伪随机数，有一定的重复概率
-    '''
     return '%015d%s000' %(int(time.time() * 1000),uuid.uuid4().hex)
 
 #这是一个用户名的表
 class User(Model):
     __table__ = 'users'
 
-    id = StringField(primary_key=True, default= next_id(), ddl= 'varchar(50)')
-    email = StringField(ddl= 'varchar(50)')
-    passwd = StringField(ddl= 'carchar(50)')
+    id = StringField(primary_key=True, default=next_id(), ddl='varchar(50)')
+    email = StringField(ddl='varchar(50)')
+    passwd = StringField(ddl='varchar(50)')
     admin = BooleanField()                      #管理员，True则表示管理员，否则不是
-    name = StringField(ddl= 'varchar(50)')
-    image = StringField(ddl= 'varchar(500)')    #头像
+    name = StringField(ddl='varchar(50)')
+    image = StringField(ddl='varchar(500)')    #头像
     created_at = FloatField(default= time.time) #创建时间默认为是当前时间
 
 #这是一个博客的表

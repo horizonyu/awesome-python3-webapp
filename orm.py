@@ -1,5 +1,4 @@
 #orm- object relational mapping 对象关系映射 用于实现面向对象编程语言里不同类型系统的数据之间的转换
-
 #创建连接池，每一个Http请求都可以从连接池中获取数据库的连接。好处是，不必频繁的打开、关闭数据库，而是尽可能的复用。连接池由全局变量__pool存储。
 import aiomysql,asyncio
 import logging;logging.basicConfig(level=logging.INFO)
@@ -7,7 +6,6 @@ import logging;logging.basicConfig(level=logging.INFO)
 @asyncio.coroutine
 def create_pool(loop,**kv):
     '''
-
     :param loop:
     :param kv: 字典dict(),有一个get方法，如果dict中有对应的value值，则返回，否则返回默认值，例如下面的host，如果dict中没有，则返回localhost
     :return:
@@ -20,7 +18,7 @@ def create_pool(loop,**kv):
         user = kv['user'],
         password = kv['password'],
         db = kv['db'],
-        charset = kv.get('charset','utf-8'),
+        charset = kv.get('charset','utf8'), #注意此处的编码为'utf8',而不是'utf-8'
         autocommit = kv.get('autocommit',True),
         maxsize = kv.get('maxsize',10),
         minsize = kv.get('minsize',1),
@@ -29,20 +27,41 @@ def create_pool(loop,**kv):
 
 #返回影响的行数
 #定义execute函数，执行Insert delete update操作
-@asyncio.coroutine
-def execute(sql,args):
-    logging.info(sql)
-    global __pool
-    with (yield from __pool) as conn:
+
+async def execute(sql, args, autocommit=True):
+    # logging.info(sql)
+    #
+    # with (await __pool) as conn:
+    #     if not autocommit:
+    #         await conn.begin()
+    #     try:
+    #
+    #         cur = await conn.cursor()
+    #         await cur.execute(sql.replace('?','%s'),args)
+    #         affected = cur.rowcount
+    #         await cur.close()
+    #
+    #         if not autocommit:
+    #             await conn.commit()
+    #
+    #     except BaseException as e:
+    #         raise
+    #     return affected
+    # execute()函数只返回结果数，不返回结果集，适用于insert, update这些语句
+    # logging(sql)
+    async with __pool.get() as conn:
+        if not autocommit:
+            await conn.begin()
         try:
-
-            cur = yield from conn.cursor()
-            yield from cur.execute(sql.replace('?','%s'),args)
-            affected = cur.rowcount
-            yield from cur.close()
-
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute(sql.replace('?', '%s'), args)
+                affected = cur.rowcount  # 返回受影响的行数
+            if not autocommit:
+                await conn.commit()
         except BaseException as e:
-            range
+            if not autocommit:
+                await conn.rollback()
+            raise
         return affected
 
 
@@ -84,7 +103,7 @@ def create_args_string(num):
 #父定义域，可以被其他类所继承
 class Field(object):
     #定义域的初始化，包括属性(列)名，属性(列)的类型，主键，默认值
-    def __init__(self,name,column_type,primary_key,default):
+    def __init__(self,name, column_type, primary_key, default):
         self.name = name
         self.column_type = column_type
         self.primary_key = primary_key
@@ -96,32 +115,31 @@ class Field(object):
         return '<%s,%s:%s>'%(self.__class__.__name__,self.column_type,self.name)
 
 #定义StringField
-class StringField(Field):
-
 #ddl（"data definition languages" 数据定义语言），默认值是'varchar(100)', 意思是可变字长，长度为100，和char相对应，char是固定长度，字符串长度不够会自动补齐，varchar则是实际的长度，但最长不能超过规定的长度。
-    def __init__(self, name = None, ddl = 'varchar(100)', primary_key = False, default = None):
-        super.__init__(name,ddl,primary_key,default)
+class StringField(Field):
+    def __init__(self, name= None, primary_key= False, default= None,ddl= 'varchar(100)'):
+        Field.__init__(self,name,ddl,primary_key,default)
 
 #定义BooleanField
 class BooleanField(Field):
     def __init__(self, name=None, default = False):
-        super.__init__(name, 'boolean', False, default)
+        Field.__init__(self, name, 'boolean', False, default)
 
 #定义IntegerField
 class IntegerField(Field):
     def __init__(self, name = None, primary_key = False, default = 0):
-        super.__init__(name,'bigint',primary_key,default)
+        super.__init__(self, name,'bigint',primary_key,default)
 
 #定义FloatField
 class FloatField(Field):
     def __init__(self, name = None, primary_key = False, default = 0.0):
-        super.__init__(name,'real',primary_key,default)
+        Field.__init__(self, name,'real',primary_key,default)
 
 
 #定义TextField
 class TextField(Field):
     def __init__(self, name = None, default = None):
-        super.__init__(name, 'text', False, default)
+        Field.__init__(self, name, 'text', False, default)
 
 
 #==================================Model基类区域==================================================
@@ -173,9 +191,14 @@ class ModelMetaClass(type):
 
         #构造默认的SELECT INSERT UPDATE DELETE语句
         attrs['__select__'] = 'select `%s`, %s from `%s`' %(primary_key,','.join(escaped_field),tableName)
-        attrs['__insert__'] = 'insert into `%s` (%s,`%s`) values(%s) )'%(tableName,','.join(escaped_field),primary_key,create_args_string(len(escaped_field)+1))
+        attrs['__insert__'] = 'insert into `%s` (%s, `%s`) values (%s) ' %(tableName, ','.join(escaped_field), primary_key, create_args_string(len(escaped_field)+1))
+
+        # attrs['__insert__'] = 'insert into `%s` (%s, `%s`) values (%s)' % (tableName, ', '.join(escaped_field), primary_key, create_args_string(len(escaped_field) + 1))
+        #
+
+
         attrs['__update__'] = 'update `%s` set %s where `%s` = ?'%(tableName,','.join(map(lambda f:'`%s` = ? '%(mappings.get(f).name or f ),fields)),primary_key)
-        attrs['__deletez__'] = 'delete from `%s` where `%s` = ? '%(tableName,primary_key)
+        attrs['__delete__'] = 'delete from `%s` where `%s` = ? '%(tableName,primary_key)
         return type.__new__(cls,name,base,attrs)
 
 #所以任何继承自Model的类,如（USer）,会自动通过ModelMetaClass扫描映射关系，并存储到自身的类属性如__table__、__mappings__中。
@@ -193,7 +216,7 @@ class Model(dict,metaclass=ModelMetaClass):
         try:
             return self[key]
         except KeyError:
-            raise AttributeError(b"'Model' object has no attribute %s"%key)
+            raise AttributeError(b"'Model' object has no attribute %s"%key.encode())
 
     #设置属性方法
     def __setattr__(self, key, value):
@@ -284,30 +307,31 @@ class Model(dict,metaclass=ModelMetaClass):
 
     #======================定义Model类实例方法，可以让子类调用此实例方法=======================================
     #sava/update/remove 三个方法，需要管理员权限才能操作，所以不定义为类方法，需要创建实例后才能调用
-    @asyncio.coroutine
-    def save(self):
+
+    async def save(self):
         #将除主键外的属性添加到args这个列表中
         args = list(map(self.getValueorDefault,self.__fields__))
         #再把主键添加到列表的最后
-        args.append(self.getValueorDefault(self.__primay_key__))
+        args.append(self.getValueorDefault(self.__primary_key__))
 
-        rows = yield from exec(self.__insert__, args)
+        sql = self.__insert__
+        rows = await execute(self.__insert__, args)
         #如果受影响的行数不为1，则出现错误
         if rows != 1:
             logging.warn('无法插入记录，受影响的行数：%s'%rows)
 
     @asyncio.coroutine
     def update(self):
-        args = list(map(self.getValue, self.__fiels__))
+        args = list(map(self.getValue, self.__fields__))
         args.append(self.getValue(self.__primary_key__))
-        rows = yield from exec(self.__update__, args)
+        rows = yield from execute(self.__update__, args)
         if rows != 1:
             logging.warn('failed to update by primary_key:affected rows: %s'%rows)
 
     @asyncio.coroutine
     def remove(self):
         args = [self.getValue(self.__primary_key__)]
-        rows = yield from exec(self.__remove__, args)
+        rows = yield from execute(self.__delete__, args)
         if rows != 1:
             logging.warn('failed to remove by primary_key:affected rows: %s'%rows)
 
