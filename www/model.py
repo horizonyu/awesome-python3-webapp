@@ -1,5 +1,7 @@
-from orm import Model,StringField,IntegerField,BooleanField,FloatField,TextField
-import time,uuid
+import time
+import uuid
+
+from www.orm import Model,StringField, BooleanField,FloatField,TextField
 
 ''' produce a unique id which is used to add a primary key to every single line
    声成一个基于时间的独一无二的id，作为数据库表中每一行的主键
