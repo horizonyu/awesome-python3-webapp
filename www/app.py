@@ -8,7 +8,7 @@ from aiohttp import web
 from jinja2 import Environment, FileSystemLoader
 from datetime import datetime
 from www.coroweb import add_static, add_routes
-
+from www import orm
 
 # 之后初始化jinja2模板
 def init_jinjia2(app, **kw):
@@ -64,12 +64,13 @@ async def logger_factory(app, handler):
 
 
 async def response_factory(app, handler):
+    logging.info('已经进入response_factory')
     '''
     将返回值改为web.Response对象
     '''
 
     async def response_middleware(request):
-        logging.info('Request handler...')
+        logging.info('response_middleware——Request handler...')
         r = await handler(request)
         if isinstance(r, web.StreamResponse):
             return r
@@ -90,6 +91,11 @@ async def response_factory(app, handler):
             if template is None:
                 resp = web.Response(
                     body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))
+                return resp
+            else:
+                ##将字典格式的数据转化为web.Response()对象
+                resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
+                resp.content_type = 'text/html;charset=utf-8'
                 return resp
 
         if isinstance(r, int) and r < 600 and r >= 100:
@@ -118,6 +124,7 @@ def hello(request):
 
 # 使用async代替@asyncio.coroutine装饰器，表示此函数需要异步运行
 async def init(loop):
+    await orm.create_pool(loop=loop, host='127.0.0.1', port=3306, user='root', password='root', db='awesome')
     app = web.Application(loop=loop, middlewares=[
         logger_factory, response_factory
     ])

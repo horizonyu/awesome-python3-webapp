@@ -5,10 +5,9 @@ import sys,asyncio
 async def test(loop):
     await orm.create_pool(loop, user='root', password='root', db='awesome')
 
-    u = User(name='test', email='test@example.com', passwd='1234567890', image='about:blank')
-
-    await u.save()
-
+    user = await User.findAll()
+    for u in user:
+        print(u.name, ',' , u.email)
 
 
 if __name__ == '__main__':

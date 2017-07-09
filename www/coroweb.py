@@ -10,7 +10,7 @@ from www.apis import APIError
 
 
 
-# 1. 需要将函数映射为URL处理函数
+## 1. 需要将函数映射为URL处理函数
 # def get(path):
 #     '''
 #     Define decorator  @get('/path')
@@ -49,6 +49,7 @@ from www.apis import APIError
 #     return decorator
 
 def Handler_decorator(path, *, method):
+    logging.info('已经进入Handler_decorator')
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kw):
@@ -128,12 +129,14 @@ def has_request_args(fn):
             raise ValueError(
                 'request parameter must be the last named parameter in function: %s%s' % (fn.__name__, str(sig)))
 
-        return found
+    return found
 
 
-# 目的： 从URL函数中分析其需要接收的参数，向request获取url处理函数所需的参数,从未调用定义的处理函数
+# 目的： 从URL函数中分析其需要接收的参数，向request获取url处理函数所需的参数,从而调用定义的处理函数
 class RequestsHandler(object):
+    logging.info('已经进入RequestsHandler')
     def __init__(self, app, fn):
+        logging.info('已经进入RequestsHandler——__init__')
         '''
         接收app参数
         '''
@@ -144,8 +147,10 @@ class RequestsHandler(object):
         self._has_named_kw_args = has_named_kw_args(fn)
         self._has_var_kw_args = has_var_kw_args(fn)
         self._has_request_args = has_request_args(fn)
+        self._name = 'name'
 
     async def __call__(self, request):
+        logging.info('已经进入RequestsHandler——__call__')
         '''
         构造协程
         :param request:
@@ -195,14 +200,14 @@ class RequestsHandler(object):
                     logging.warning('Duplicate arg name in named arg and kw args: %s' % k)
 
                 kw[k] = v
-            if self._has_request_args:
-                kw['request'] = request
-            if self._required_kw_args:
-                # 假如命名关键字参数(没有附加默认值)，request没有提供相应的数值，报错
-                for name in self._required_kw_args:
-                    if name not in kw:
-                        return web.HTTPBadRequest(text='Missing argument: %s' % (name))
-            logging.info('call with args: %s' % str(kw))
+        if self._has_request_args:
+            kw['request'] = request
+        if self._required_kw_args:
+            # 假如命名关键字参数(没有附加默认值)，request没有提供相应的数值，报错
+            for name in self._required_kw_args:
+                if name not in kw:
+                    return web.HTTPBadRequest(text='Missing argument: %s' % (name))
+        logging.info('call with args: %s' % str(kw))
 
         try:
             r = await self._fn(**kw)
@@ -213,6 +218,7 @@ class RequestsHandler(object):
 
 # 3. 注册URL处理函数
 def add_route(app, fn):
+    logging.info('已经进入add_route')
     '''
     注册一个URL处理函数
     :param app:
@@ -232,6 +238,7 @@ def add_route(app, fn):
 
 
 def add_routes(app, moudle_name):
+    logging.info('已经进入add_routes')
     '''
     直接导入需要处理的函数所在的文件，批量注册多个URL处理函数
     :param app:

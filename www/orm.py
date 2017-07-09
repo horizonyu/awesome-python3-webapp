@@ -246,6 +246,7 @@ class Model(dict, metaclass=ModelMetaClass):
     # findAll 根据where条件查找
     @classmethod
     async def findAll(cls, where=None, args=None, **kw):
+        ' find objects by where clause. '
         sql = [cls.__select__]
         # 如果存在where参数，就在sql语句中添加字符串where和参数where
         if where:
